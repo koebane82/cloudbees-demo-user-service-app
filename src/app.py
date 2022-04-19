@@ -3,7 +3,7 @@ import argparse
 
 from app_config import AppConfig
 import user_service
-from lib.parameters import AWSParameter
+from libs.parameters import AWSParameter
 from http.server import HTTPServer
 
 def get_arguments():

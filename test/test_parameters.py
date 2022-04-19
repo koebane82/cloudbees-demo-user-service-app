@@ -1,5 +1,5 @@
-from src.lib.parameters import AWSParameter
-from src.lib.parameters import ParameterNotFoundException
+from src.libs.parameters import AWSParameter
+from src.libs.parameters import ParameterNotFoundException
 from .mock_boto import MockSSM
 import unittest
 

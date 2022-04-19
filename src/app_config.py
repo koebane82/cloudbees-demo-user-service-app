@@ -1,6 +1,6 @@
 import logging
 import os
-from lib.parameters import Parameter, ParameterNotFoundException
+from libs.parameters import Parameter, ParameterNotFoundException
 
 APPLICATION_NAME = "test-application"
 

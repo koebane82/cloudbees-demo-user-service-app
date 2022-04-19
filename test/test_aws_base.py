@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 from .mock_boto import MockBoto, MockGenericClient
-from src.lib.aws_base import AWSBase
+from src.libs.aws_base import AWSBase
 
 class TestAWSBase(unittest.TestCase):
     def setUp(self) -> None:
