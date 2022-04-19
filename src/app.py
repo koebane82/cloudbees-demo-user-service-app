@@ -29,24 +29,27 @@ def get_arguments():
 if __name__ == "__main__":
     args = get_arguments()
 
+    # set log level before reading configs
     initial_log_level = logging.INFO
     if args.debug:
         initial_log_level = logging.DEBUG
 
-    #logging.basicConfig(format=AppConfig.get_log_format(initial_log_level),
-    #                    level=initial_log_level)
-
+    # set initital logger
     _handlers = AppConfig.get_log_handlers(initial_log_level)
     logging.basicConfig(level=initial_log_level,
                         handlers=_handlers)
     logging.info("LogLevel set to %s", initial_log_level)
+
+    # empty variable for parameter client
     parameter_client = None
 
+    # if aws environment, create aws parameter client
     if args.aws:
         logging.info("Application is running in AWS")
         logging.debug("Generating AWS Parameter Client")
         parameter_client = AWSParameter()
 
+    # get application configuration
     logging.debug("Generating Application configuration")
     _config = AppConfig(parameter_client=parameter_client,
                         debug=args.debug)
@@ -55,7 +58,9 @@ if __name__ == "__main__":
     logging.basicConfig(level=_config.log_level, handlers=_config.log_handlers)
     logging.info("Starting HTTP Server on %s", args.port)
 
+    # set config in user_service library
     user_service.config = _config
+    # create webserver object
     webserver = HTTPServer((args.listen_addr, int(args.port)), user_service.UserService)
 
     try:
