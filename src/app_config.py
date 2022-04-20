@@ -2,7 +2,7 @@ import logging
 import os
 from libs.parameters import Parameter, ParameterNotFoundException
 
-APPLICATION_NAME = "test-application"
+APPLICATION_NAME = "user-service"
 
 class AppConfig:
     """AppConfig is a class which stores the configurtion of the application

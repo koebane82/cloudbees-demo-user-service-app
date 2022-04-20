@@ -1,0 +1,173 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  ServiceName:
+    Type: String
+    Description: The name of the service
+    Default: user-service
+  DockerImageTag:
+    Type: String
+    Description: the tag of the docker image
+  ECSClusterName:
+    Type: String
+    Description: the name of the ECS cluster to deploy the service
+  ServicePath:
+    Type: String
+    Description: The http path of the service
+    Default: /user
+  ServicePort:
+    Type: Number
+    Description: The TCP Port that service listens
+    Default: 8080
+  ECRAWSAccount:
+    Type: AWS::EC2::VPC::Id
+    Description: The id of the AWS Account
+  CPUAllocation:
+    Type: Number
+    Description: The number of CPU Units allocated to the service
+    Default: 1024
+  MemoryLimit:
+    Type: Number
+    Description: The most memory that the service can consume
+    Default: 2048
+  MemoryAllocation:
+    Type: Number
+    Description: THe amount of memory that the service initially requests
+    Default: 1024
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: The subnets that the service can attach
+  SecurityGroups:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: The security groups attached to the service
+  AlbListenerArn:
+    Type: String
+    Description: Alb Listener ARN
+  AlbListenerPriority:
+    Type: Number
+    Description: The priority of the service's path on the listener
+    Default: 0
+
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "mysite/${ServiceName}/ecs"
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ContainerDefinitions:
+        - Name: !Sub "${ServiceName}-td"
+          Image: !Sub "${ECRAWSAccount}.dkr.ecr.us-east-1.amazonaws.com/user-service:${DockerImageTag}"
+          PortMappings:
+            - ContainerPort: !Ref ServicePort
+          Cpu: !Ref CPUAllocation
+          Memory: !Ref MemoryLimit
+          MemoryReservation: !Ref MemoryAllocation
+          LogConfiguration:
+            LogDriver: awslogs
+            Options: 
+              awslogs-group: !GetAtt LogGroup.Arn
+              awslogs-region: !Ref AWS::Region
+      TaskRoleArn: !GetAtt IamRole.Arn
+      ExecutionRoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/ecs-task-executor-role"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      Cpu: !Ref CPUAllocation
+      Memory: !Ref MemoryLimit
+  
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "${ServiceName}-app"
+      Cluster: !Ref ECSClusterName
+      LaunchType: FARGATE
+      HealthCheckGracePeriodSeconds: 150
+      TaskDefinition: !Ref TaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups: !Ref SecurityGroups
+          Subnets: !Ref Subnets
+      LoadBalancers:
+        - ContainerName: !Ref ServiceName
+          ContainerPort: !Ref ServicePort
+          TargetGroupArn: !Ref TargetGroup
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${ServiceName}-tg"
+      VpcId: !Ref AWS::AccountId
+      Port: !Ref ServicePort
+      Protocol: HTTP
+      Matcher:
+        HttpCode: 200
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: "/health"
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      TargetType: ip
+
+  AlbListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref AlbListenerArn
+      Priority: !Ref AlbListenerPriority
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - !Ref ServicePath
+            - !Sub "${ServicePath}/*"
+      Actions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: foward
+  
+  IamRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      RoleName: !Sub "${ServiceName}-ECS-Role"
+      Description: !Sub "ECS Service Role for ${ServiceName}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principle:
+              Service:
+                - ecs-task.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: '/ecs/service-roles'
+
+  IamPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "${ServiceName}-ECS-Policy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource:
+              - !GetAtt IamRole.Arn
+              - !Join
+                - "/"
+                - - !GetAtt IamRole.Arn
+                  - "*"
+          - Effect: Allow
+            Action:
+              - "ssm:PutParameter"
+              - "ssm:GetParametersByPath"
+              - "ssm:GetParameters"
+              - "ssm:GetParameter"
+            Resource:
+              - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/user-service/*"
+      Roles:
+        - !Ref IamRole
